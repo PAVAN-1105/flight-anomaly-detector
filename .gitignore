@@ -1,0 +1,12 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+.env
+
+# Angular / Node
+frontend/node_modules/
+frontend/.angular/
+
+# Mac System Files
+.DS_Store
