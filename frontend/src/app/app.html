@@ -1,0 +1,62 @@
+<div class="dashboard-wrapper">
+  <nav class="topbar">
+    <div class="logo">Engine Diagnostics <span>PRO</span></div>
+  </nav>
+
+  <main class="dashboard-content">
+    <aside class="sidebar">
+      <div class="card control-panel">
+        <h2>Data Ingestion</h2>
+        <p class="text-muted">Select C-MAPSS telemetry data for analysis.</p>
+        
+        <input type="file" (change)="onFileSelected($event)" #fileInput hidden accept=".txt,.csv">
+        <button class="btn-primary" (click)="fileInput.click()" [disabled]="isLoading">
+          {{ isLoading ? 'Analyzing Telemetry...' : 'Upload Flight Data' }}
+        </button>
+        <p class="file-name">{{ fileName }}</p>
+      </div>
+
+      <div class="card status-panel" *ngIf="apiData" [class.danger]="apiData.first_anomaly_cycle">
+        <h2>System Status</h2>
+        <div class="status-indicator">
+          <div class="dot" [class.pulse-red]="apiData.first_anomaly_cycle" [class.pulse-green]="!apiData.first_anomaly_cycle"></div>
+          <h3>{{ apiData.first_anomaly_cycle ? 'MAINTENANCE REQUIRED' : 'OPTIMAL' }}</h3>
+        </div>
+        
+        <div class="metrics">
+          <div class="metric">
+            <span>Safety Threshold</span>
+            <strong>{{ apiData.threshold | number:'1.4-4' }}</strong>
+          </div>
+          <div class="metric" *ngIf="apiData.first_anomaly_cycle">
+            <span>Failure Detected At</span>
+            <strong class="text-red">Cycle {{ apiData.first_anomaly_cycle }}</strong>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <section class="chart-section">
+      <div class="card chart-card">
+        <div class="chart-header">
+          <h2>Reconstruction Error Analysis</h2>
+          <span class="badge">LSTM Autoencoder</span>
+        </div>
+        
+        <div class="canvas-container" *ngIf="apiData; else noData">
+          <canvas baseChart 
+            [data]="lineChartData" 
+            [options]="lineChartOptions" 
+            [type]="'line'">
+          </canvas>
+        </div>
+        
+        <ng-template #noData>
+          <div class="empty-state">
+            <p>Awaiting telemetry data injection.</p>
+          </div>
+        </ng-template>
+      </div>
+    </section>
+  </main>
+</div>
