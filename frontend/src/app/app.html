@@ -1,62 +1,99 @@
 <div class="dashboard-wrapper">
   <nav class="topbar">
-    <div class="logo">Engine Diagnostics <span>PRO</span></div>
+    <div class="logo">Flight Anomaly <span>Detector</span></div>
   </nav>
 
   <main class="dashboard-content">
-    <aside class="sidebar">
-      <div class="card control-panel">
-        <h2>Data Ingestion</h2>
-        <p class="text-muted">Select C-MAPSS telemetry data for analysis.</p>
+
+    <div class="centered-state" *ngIf="!apiData">
+      <div class="upload-card-large">
+        <div class="upload-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 16.5V9.75m0 0l3 3m-3-3l-3 3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.233-2.33 3 3 0 013.758 3.848A3.752 3.752 0 0118 19.5H6.75z" />
+          </svg>
+        </div>
+        <h2>Upload Flight Data</h2>
+        
         
         <input type="file" (change)="onFileSelected($event)" #fileInput hidden accept=".txt,.csv">
-        <button class="btn-primary" (click)="fileInput.click()" [disabled]="isLoading">
-          {{ isLoading ? 'Analyzing Telemetry...' : 'Upload Flight Data' }}
+        <button class="btn-primary btn-large" (click)="fileInput.click()" [disabled]="isLoading">
+          {{ isLoading ? 'Running Neural Network...' : 'Select File' }}
         </button>
-        <p class="file-name">{{ fileName }}</p>
+        <p class="file-name" *ngIf="fileName !== 'No file selected'">{{ fileName }}</p>
       </div>
+    </div>
 
-      <div class="card status-panel" *ngIf="apiData" [class.danger]="apiData.first_anomaly_cycle">
-        <h2>System Status</h2>
-        <div class="status-indicator">
-          <div class="dot" [class.pulse-red]="apiData.first_anomaly_cycle" [class.pulse-green]="!apiData.first_anomaly_cycle"></div>
-          <h3>{{ apiData.first_anomaly_cycle ? 'MAINTENANCE REQUIRED' : 'OPTIMAL' }}</h3>
-        </div>
+    <ng-container *ngIf="apiData">
+      <aside class="sidebar">
         
-        <div class="metrics">
-          <div class="metric">
-            <span>Safety Threshold</span>
-            <strong>{{ apiData.threshold | number:'1.4-4' }}</strong>
-          </div>
-          <div class="metric" *ngIf="apiData.first_anomaly_cycle">
-            <span>Failure Detected At</span>
-            <strong class="text-red">Cycle {{ apiData.first_anomaly_cycle }}</strong>
-          </div>
+        <div class="card minimal-upload">
+          <input type="file" (change)="onFileSelected($event)" #fileInput hidden accept=".txt,.csv">
+          <button class="btn-outline" (click)="fileInput.click()" [disabled]="isLoading">
+            {{ isLoading ? 'Analyzing...' : 'Upload New Data' }}
+          </button>
+          <p class="file-name-small" *ngIf="fileName !== 'No file selected'">{{ fileName }}</p>
         </div>
-      </div>
-    </aside>
 
-    <section class="chart-section">
-      <div class="card chart-card">
-        <div class="chart-header">
-          <h2>Reconstruction Error Analysis</h2>
-          <span class="badge">LSTM Autoencoder</span>
-        </div>
-        
-        <div class="canvas-container" *ngIf="apiData; else noData">
-          <canvas baseChart 
-            [data]="lineChartData" 
-            [options]="lineChartOptions" 
-            [type]="'line'">
-          </canvas>
-        </div>
-        
-        <ng-template #noData>
-          <div class="empty-state">
-            <p>Awaiting telemetry data injection.</p>
+        <div class="card status-panel" [class.danger]="apiData.first_anomaly_cycle">
+          <h2>System Status</h2>
+          <div class="status-indicator">
+            <div class="dot" [class.pulse-red]="apiData.first_anomaly_cycle" [class.pulse-green]="!apiData.first_anomaly_cycle"></div>
+            <h3>{{ apiData.first_anomaly_cycle ? 'MAINTENANCE REQUIRED' : 'OPTIMAL' }}</h3>
           </div>
-        </ng-template>
-      </div>
-    </section>
+          
+          <div class="metrics">
+            <div class="metric">
+              <span>Safety Threshold</span>
+              <strong>{{ apiData.threshold | number:'1.4-4' }}</strong>
+            </div>
+
+            <div class="metric predictive-box" *ngIf="!apiData.first_anomaly_cycle">
+              <span>Estimated RUL</span>
+              <strong [class.text-warning]="estimatedRUL !== 'Stable'">
+                {{ estimatedRUL }} {{ estimatedRUL === 'Stable' ? '' : 'Cycles' }}
+              </strong>
+            </div>
+
+            <div class="metric" *ngIf="apiData.first_anomaly_cycle">
+              <span>Failure Detected At</span>
+              <strong class="text-red">Cycle {{ apiData.first_anomaly_cycle }}</strong>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <section class="chart-section">
+        <div class="card chart-card">
+          <div class="chart-header">
+            <h2>Reconstruction Error Analysis</h2>
+            <span class="badge">LSTM Autoencoder</span>
+          </div>
+          
+          <div class="canvas-container">
+            <canvas baseChart #lineChart="base-chart"
+              [data]="lineChartData" 
+              [options]="lineChartOptions" 
+              [type]="'line'">
+            </canvas>
+          </div>
+        </div>
+
+        <div class="card chart-card root-cause-card">
+          <div class="chart-header">
+            <h2>{{ selectedCycleText }}</h2>
+            <span class="badge badge-blue">Sensor Contribution</span>
+          </div>
+          
+          <div class="canvas-container bar-container">
+            <canvas baseChart #barChart="base-chart"
+              [data]="barChartData" 
+              [options]="barChartOptions" 
+              [type]="'bar'">
+            </canvas>
+          </div>
+        </div>
+      </section>
+    </ng-container>
+
   </main>
 </div>

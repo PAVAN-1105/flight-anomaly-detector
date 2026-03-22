@@ -7,16 +7,17 @@ tf.config.set_visible_devices([], 'GPU')
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import pandas as pd
-import numpy as np
 from tensorflow.keras.models import load_model
 import joblib
 
-# Import our custom ML modules
+# Import custom ML modules
 from src.anomaly_detector import AnomalyDetector
 from src.data_loader import load_cmapss_data
 from src.preprocessing import preprocess_data
 from src.window_generator import create_sequences
+
+# --- NEW: Import our dedicated service layer ---
+from src.engine_service import process_flight_data
 
 app = FastAPI(title="Flight Anomaly Detection API")
 
@@ -28,7 +29,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-# --------------------------
 
 # Global variables
 model = None
@@ -72,58 +72,16 @@ class EngineDataPayload(BaseModel):
 
 @app.post("/analyze_engine")
 def analyze_engine(payload: EngineDataPayload):
-    # 1. Define columns (2 columns for ID/Cycle + 24 features)
-    columns = ['engine_id', 'cycle', 'op_setting_1', 'op_setting_2', 'op_setting_3'] + \
-              [f'sensor_{i}' for i in range(1, 22)]
-
-    df_incoming = pd.DataFrame(payload.raw_rows, columns=columns)
-
-    # 2. Preprocessing
-    cols_to_drop = ['op_setting_3', 'sensor_1', 'sensor_5',
-                    'sensor_10', 'sensor_16', 'sensor_18', 'sensor_19']
-    
-    # Keep cycle for mapping errors back to time
-    cycles_all = df_incoming['cycle'].values
-    df_features = df_incoming.drop(
-        columns=['engine_id', 'cycle'] + cols_to_drop)
-
-    # 3. Scale and Sequence
-    scaled_data = scaler.transform(df_features)
-
-    window_size = 30
-    if len(scaled_data) < window_size:
-        raise HTTPException(
-            status_code=400, detail="Need at least 30 cycles of data.")
-
-    # Create sliding windows for the entire history
-    sequences = []
-    for i in range(len(scaled_data) - window_size + 1):
-        sequences.append(scaled_data[i: i + window_size])
-    X_input = np.array(sequences)
-
-    # 4. Predict for all windows
-    is_anomaly, errors = detector.detect_anomalies(X_input)
-
-    # 5. Map results (The error for a window belongs to the last cycle of that window)
-    result_cycles = cycles_all[window_size - 1:].tolist()
-    errors_list = errors.flatten().tolist()
-
-    # 6. Find the specific point where anomaly first occurs
-    anomaly_indices = np.where(is_anomaly)[0]
-    first_anomaly_cycle = None
-    if len(anomaly_indices) > 0:
-        first_anomaly_cycle = int(result_cycles[anomaly_indices[0]])
-
-    return {
-        "status": "success",
-        "threshold": float(threshold),
-        "cycles": result_cycles,
-        "errors": errors_list,
-        "first_anomaly_cycle": first_anomaly_cycle,
-        "is_currently_failing": bool(is_anomaly[-1])
-    }
-
-# Keeping your old endpoint for backward compatibility
-@app.post("/predict")
-def predict_anomaly(data: EngineDataPayload):
-    pass
+    """
+    Receives flight telemetry from the Angular frontend and routes it 
+    to the Engine Service for ML processing and formatting.
+    """
+    try:
+        return process_flight_data(
+            raw_rows=payload.raw_rows,
+            scaler=scaler,
+            detector=detector,
+            threshold=threshold
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
